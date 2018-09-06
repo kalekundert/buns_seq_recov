@@ -24,9 +24,15 @@ setup(
     ],
     entry_points={
         'console_scripts': [
-            'buns_seq_recov=buns_seq_recov:main',
+            'buns_seq_recov_qsub=buns_seq_recov.run:qsub_main',
+            'buns_seq_recov_sge=buns_seq_recov.run:sge_main',
+            'buns_seq_recov_local=buns_seq_recov.run:local_main',
+            'buns_seq_recov_clear=buns_seq_recov.run:clear_main',
+            'buns_seq_recov_config=buns_seq_recov.run:config_main',
         ],
     },
     install_requires=[
+        'docopt',
+        'pathlib',
     ],
 )
