@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 
 import os
 import json
@@ -43,7 +43,7 @@ class Benchmark:
 
         @property
         def output_dir(self):
-            if self.job.run_locally:
+            if self.job.local_run:
                 return self.bench.root / 'local' / self.job.scorefxn 
             else:
                 return self.bench.root / self.job.scorefxn 
@@ -95,6 +95,9 @@ class Benchmark:
     def scorefxns(self):
         return self.config['scorefxns']
 
+    def inputs(self, job):
+        return self.JobInput(self, job)
+
     @property
     def input_combos(self):
         return list(itertools.product(self.pdbs, self.scorefxns))
@@ -102,9 +105,6 @@ class Benchmark:
     @property
     def input_pdb_dir(self):
         return self.root / Path(self.config['pdb_dir'])
-
-    def inputs(self, job):
-        return self.JobInput(self, job)
 
     def outputs(self, job):
         return self.JobOutput(self, job)
@@ -114,7 +114,12 @@ class Benchmark:
 
     @property
     def rosetta_dir(self):
-        return Path(self.config['rosetta_dir'])
+        rosetta_dir = Path(self.config['rosetta_dir'])
+        if rosetta_dir.is_absolute():
+            return rosetta_dir
+        else:
+            return self.root / rosetta_dir
+
 
     @property
     def rosetta_bin_dir(self):
@@ -127,21 +132,15 @@ class Benchmark:
     def rosetta_version_path(self):
         return self.root / 'rosetta_version'
 
-    @property
-    def record_local_job(self, job):
-        local_jobs = self.local_jobs
-        local_jobs.append(job)
-        local_jobs_json = [x.to_json() for x in local_jobs]
-
-        with open(self.local_job_path, 'w') as f:
-            f.write(local_jobs_json)
+    def jobs(self, local_run=True):
+        return self.local_jobs if local_run else self.sge_jobs
 
     @property
-    def last_local_job(self):
-        try:
-            return self.local_jobs[-1]
-        except IndexError:
-            return None
+    def sge_jobs(self):
+        return [
+                Job(self, pdb, sfxn, local_run=False)
+                for pdb, sfxn in self.input_combos
+        ]
 
     @property
     def local_jobs(self):
@@ -153,6 +152,21 @@ class Benchmark:
     @property
     def local_job_path(self):
         return self.root / 'last_local_job.json'
+    @property
+    def last_local_job(self):
+        try:
+            return self.local_jobs[-1]
+        except IndexError:
+            return None
+
+    def record_local_job(self, job):
+        local_jobs = self.local_jobs
+        local_jobs.append(job)
+        local_jobs_json = [x.to_json() for x in local_jobs]
+
+        with open(self.local_job_path, 'w') as f:
+            json.dump(local_jobs_json, f)
+
 
 
 class Job:
@@ -161,16 +175,16 @@ class Job:
     def from_sge_task_id(cls, bench):
         id = int(os.environ['SGE_TASK_ID'])
         pdb, scorefxn = bench.input_combos[id]
-        return cls(bench, pdb, scorefxn, run_locally=False)
+        return cls(bench, pdb, scorefxn, local_run=False)
 
     def to_json(self):
         return {'pdb': self.pdb, 'sfxn': self.scorefxn}
 
     @classmethod
     def from_json(cls, bench, json_dict):
-        return cls(bench, json_dict['pdb'], json_dict['scorefxn'])
+        return cls(bench, json_dict['pdb'], json_dict['sfxn'])
 
-    def __init__(self, bench, pdb, scorefxn, run_locally=True):
+    def __init__(self, bench, pdb, scorefxn, local_run=True):
         if pdb not in bench.pdbs:
             raise ValueError("no pdb '{}' in benchmark '{}'".format(pdb, bench))
         if scorefxn not in bench.scorefxns:
@@ -181,7 +195,10 @@ class Job:
         self.scorefxn = scorefxn
         self.inputs = bench.inputs(self)
         self.outputs = bench.outputs(self)
-        self.run_locally = run_locally
+        self.local_run = local_run
+
+    def __str__(self):
+        return f"Job({self.bench}, {self.pdb}, {self.scorefxn})"
 
 
 class ConfigError(Exception):

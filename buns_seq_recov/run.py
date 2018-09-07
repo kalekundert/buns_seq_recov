@@ -1,40 +1,11 @@
-#!/usr/bin/env python2
-
-CONFIG_DOCS = """\
-Configuration:
-    The following options can be specified in the `benchmark.json` file.  The 
-    file should contain a single dictionary, with keys corresponding to the 
-    options listed below.  Defaults will apply for any options that aren't 
-    specified.  However, it is required for `benchmark.json` to exist and to 
-    contain a dictionary, so if you'd like to accept all the defaults, you'll 
-    still need to create a file with an empty dictionary (e.g. "{}").
-
-    "pdb_dir"  [type: str; default: "../park2016/ref"]
-        The path, relative to the benchmark directory, to the directory 
-        containing the PDB file to test.  This value can contain 
-
-    "scorefxns"  [type: list; default: ["ref", "ref_buns_10"]]
-        The score functions to compare in the benchmark.  The options are "ref" 
-        (i.e. ref2015) or "ref_buns_XX" (e.g. ref2015 with a penalty for buried 
-        unsats), where XX indicates that the `buried_unsatisfied_penalty` has a 
-        weight of X.X, and can be either "02", "04", "06", "08", or "10".
-
-    "rosetta_dir"  [type: str; default: $ROSETTA environment variable]
-        The path to the root of the Rosetta installation to use for this 
-        benchmark.  The given installation must include a 'source/bin' 
-        directory, which means that Rosetta needs to be compiled.
-
-    "rosetta_build"  [type: str; default: $ROSETTA_BUILD environment variable]
-        The build to use, e.g. "linuxclangrelease".  The specific builds depend 
-        on what platfrom you're on.  It's best to use a release build for full 
-        benchmark runs.
-"""
+#!/usr/bin/env python3
 
 import sys
 import docopt
 import shutil
 import subprocess
-from . import Benchmark, Job
+from .cli import main
+from .layout import Benchmark, Job
 from pprint import pprint
 
 def record_rosetta_version(bench):
@@ -56,8 +27,8 @@ def buns_seq_recov(job, resis=None):
             '-app:out:scores', job.outputs.score_path,
             '-app:out:pdbs', job.outputs.pdb_prefix,
             '-app:out:hbonds', job.outputs.hbond_prefix,
-            '-app:out:save_pdbs', job.run_locally,
-            '-app:out:save_hbonds', job.run_locally,
+            '-app:out:save_pdbs', job.local_run,
+            '-app:out:save_hbonds', job.local_run,
             '-out:mute all',
             '-out:unmute apps',
             '-out:unmute core.init',
@@ -72,12 +43,13 @@ def buns_seq_recov(job, resis=None):
     subprocess.call([str(x) for x in cmd])
 
 
-def qsub_main():
+@main
+def qsub_main(args):
     """\
 Predict sequence recovery for each test case in the given benchmark.
 
 Usage:
-    buns_seq_recov_qsub <directory>
+    {PKG_PREFIX}_qsub <directory>
 
 Arguments:
     <directory>
@@ -88,7 +60,6 @@ Arguments:
 
 {CONFIG_DOCS}
 """
-    args = docopt.docopt(qsub_main.__doc__.format(**globals()))
     bench = Benchmark(args['<directory>'])
     record_rosetta_version(bench)
     subprocess.call([
@@ -102,13 +73,14 @@ def sge_main():
     job = Job.from_sge_task_id(bench)
     buns_seq_recov(job)
 
-def local_main():
+@main
+def local_main(args):
     """\
 Predict sequence recovery locally for the given benchmark case(s), saving 
 detailed information on the structure and H-bonding network of each mutant. 
 
 Usage:
-    buns_seq_recov_local <directory> <sfxn> <pdb> [<resis>]
+    {PKG_PREFIX}_local <directory> <sfxn> <pdb> [<resis>]
 
 Arguments:
     <directory>
@@ -134,19 +106,24 @@ Arguments:
 
 {CONFIG_DOCS}
 """
-    args = docopt.docopt(local_main.__doc__.format(**globals()))
     bench = Benchmark(args['<directory>'])
     job = Job(bench, args['<pdb>'], args['<sfxn>'])
+
+    # Record the job before we actually do anything, in case something goes 
+    # wrong with the JSON.  Better to crash before doing a bunch of work.
+    bench.record_local_job(job)
+
     buns_seq_recov(job, args['<resis>'])
 
-def clear_main():
+
+@main
+def clear_main(args):
     """\
 Delete all results from the given benchmark.
 
 Usage:
-    buns_seq_recov_config <directory>
+    {PKG_PREFIX}_config <directory>
 """
-    args = docopt.docopt(config_main.__doc__.format(**globals()))
     bench = Benchmark(args['<directory>'])
     for p in bench.root.glob('*'):
         if p != bench.config_path:
@@ -155,12 +132,13 @@ Usage:
             else:
                 p.unlink()
     
+@main
 def config_main():
     """\
 Display the configuration values for the indicated benchmark.
 
 Usage:
-    buns_seq_recov_config <directory>
+    {PKG_PREFIX}_config <directory>
 
 Arguments:
     <directory>
@@ -171,10 +149,9 @@ Arguments:
 
 {CONFIG_DOCS}
 """
-    args = docopt.docopt(config_main.__doc__.format(**globals()))
     bench = Benchmark(args['<directory>'])
-    print "'pdb_dir':       '{}' ({} PDBs)".format(bench.config['pdb_dir'], len(bench.pdbs))
-    print "'scorefxns':     {} ({} sfxns)".format(bench.config['scorefxns'], len(bench.scorefxns))
-    print "'rosetta_dir':   '{}'".format(bench.config['rosetta_dir'])
-    print "'rosetta_build': '{}'".format(bench.config['rosetta_build'])
+    print("'pdb_dir':       '{}' ({} PDBs)".format(bench.config['pdb_dir'], len(bench.pdbs)))
+    print("'scorefxns':     {} ({} sfxns)".format(bench.config['scorefxns'], len(bench.scorefxns)))
+    print("'rosetta_dir':   '{}'".format(bench.config['rosetta_dir']))
+    print("'rosetta_build': '{}'".format(bench.config['rosetta_build']))
     
