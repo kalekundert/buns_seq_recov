@@ -24,7 +24,6 @@ class Benchmark:
         def pdb_path(self):
             return self.bench.input_pdb_dir / '{}.pdb'.format(self.job.pdb)
 
-
     class JobOutput:
 
         def __init__(self, bench, job):
@@ -39,7 +38,7 @@ class Benchmark:
                     self.hbond_prefix,
             ]
             for p in paths:
-                p.parent.mkdir(parents=True)
+                p.parent.mkdir(parents=True, exist_ok=True)
 
         @property
         def output_dir(self):
@@ -59,6 +58,7 @@ class Benchmark:
         @property
         def hbond_prefix(self):
             return self.output_dir / 'hbond' / '{}_'.format(self.job.pdb)
+
 
     def __init__(self, root):
         if not Path(root).is_dir():
@@ -87,6 +87,14 @@ class Benchmark:
     def __str__(self):
         return self.root_str
 
+    def clear(self):
+        for p in self.root.glob('*'):
+            if p != self.config_path:
+                if p.is_dir():
+                    shutil.rmtree(str(p))
+                else:
+                    p.unlink()
+
     @property
     def pdbs(self):
         return [x.stem for x in self.input_pdb_dir.glob('*.pdb')]
@@ -109,6 +117,10 @@ class Benchmark:
     def outputs(self, job):
         return self.JobOutput(self, job)
 
+    @property
+    def log_dir(self):
+        return self.root / 'log'
+
     def rosetta_exe(self, exe):
         return self.rosetta_bin_dir / '{}.{}'.format(exe, self.rosetta_build)
 
@@ -119,7 +131,6 @@ class Benchmark:
             return rosetta_dir
         else:
             return self.root / rosetta_dir
-
 
     @property
     def rosetta_bin_dir(self):
@@ -168,13 +179,12 @@ class Benchmark:
             json.dump(local_jobs_json, f)
 
 
-
 class Job:
 
     @classmethod
     def from_sge_task_id(cls, bench):
         id = int(os.environ['SGE_TASK_ID'])
-        pdb, scorefxn = bench.input_combos[id]
+        pdb, scorefxn = bench.input_combos[id - 1]
         return cls(bench, pdb, scorefxn, local_run=False)
 
     def to_json(self):

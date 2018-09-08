@@ -6,14 +6,14 @@ import shutil
 import subprocess
 from .cli import main
 from .layout import Benchmark, Job
-from pprint import pprint
 
 def record_rosetta_version(bench):
-    git = lambda *args: unicode(subprocess.check_output(
-            ['git', '-C', str(bench.rosetta_dir)] + list(args)
-    ))
+    def git(*args):
+        cmd = 'git', '-C', str(bench.rosetta_dir), *args
+        return subprocess.check_output(cmd, encoding='utf8')
+
     with bench.rosetta_version_path.open('w') as f:
-        f.write(u'Commit: {}\n'.format(git('rev-parse', 'HEAD')))
+        f.write('Commit: {}\n'.format(git('rev-parse', 'HEAD')))
         f.write(git('status'))
 
 def buns_seq_recov(job, resis=None):
@@ -42,14 +42,13 @@ def buns_seq_recov(job, resis=None):
     job.outputs.mkdirs()
     subprocess.call([str(x) for x in cmd])
 
-
 @main
 def qsub_main(args):
     """\
 Predict sequence recovery for each test case in the given benchmark.
 
 Usage:
-    {PKG_PREFIX}_qsub <directory>
+    {PKG_PREFIX}_qsub <directory> [-c]
 
 Arguments:
     <directory>
@@ -58,15 +57,35 @@ Arguments:
         parameters of the benchmark (see below for a complete reference).  The 
         directory will be populated with output files as the benchmark runs.
 
+Options:
+    -c --clear
+        Delete any old results before submitting the new simulations.
+
 {CONFIG_DOCS}
 """
     bench = Benchmark(args['<directory>'])
+    if args['--clear']:
+        bench.clear()
+
+    print("Extracting Rosetta version info...")
     record_rosetta_version(bench)
-    subprocess.call([
+    bench.log_dir.mkdir(exist_ok=True)
+
+    qsub_cmd = [ 
             'qsub',
-            '-t', '1-{}'.format(len(bench.input_combos)),
+            '-N', 'buns_seq_recov',
+            '-t', f'1-{len(bench.input_combos)}',
+            '-b', 'y',
+            '-V',
+            '-l', 'h_rt=48:00:00',
+            '-l', 'mem_free=1G',
+            '-l', 'netapp=1G,scratch=1G',
+            '-l', 'arch=linux-x64',
+            '-o', str(bench.log_dir),
+            '-j', 'y',
             'buns_seq_recov_sge', str(bench.root),
-    ])
+    ]
+    subprocess.call(qsub_cmd)
 
 def sge_main():
     bench = Benchmark(sys.argv[1])
@@ -125,15 +144,10 @@ Usage:
     {PKG_PREFIX}_config <directory>
 """
     bench = Benchmark(args['<directory>'])
-    for p in bench.root.glob('*'):
-        if p != bench.config_path:
-            if p.is_dir():
-                shutil.rmtree(str(p))
-            else:
-                p.unlink()
+    bench.clear()
     
 @main
-def config_main():
+def config_main(args):
     """\
 Display the configuration values for the indicated benchmark.
 
