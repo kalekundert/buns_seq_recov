@@ -120,7 +120,11 @@ class Benchmark:
 
     @property
     def input_pdb_dir(self):
-        return self.root / Path(self.config['pdb_dir'])
+        pdb_dir = Path(self.config['pdb_dir']).expanduser()
+        if pdb_dir.is_absolute():
+            return pdb_dir
+        else:
+            return self.root / pdb_dir
 
     def outputs(self, job):
         return self.JobOutput(self, job)
@@ -134,7 +138,7 @@ class Benchmark:
 
     @property
     def rosetta_dir(self):
-        rosetta_dir = Path(self.config['rosetta_dir'])
+        rosetta_dir = Path(self.config['rosetta_dir']).expanduser()
         if rosetta_dir.is_absolute():
             return rosetta_dir
         else:
