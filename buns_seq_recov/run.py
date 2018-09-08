@@ -16,7 +16,7 @@ def record_rosetta_version(bench):
         f.write('Commit: {}\n'.format(git('rev-parse', 'HEAD')))
         f.write(git('status'))
 
-def buns_seq_recov(job, resis=None):
+def buns_seq_recov(job):
     if job.outputs.score_path.exists():
         raise ValueError("output file '{}' already exists; refusing to overwrite.".format(job.outputs.score_path))
 
@@ -24,6 +24,7 @@ def buns_seq_recov(job, resis=None):
             job.bench.rosetta_exe('buried_unsats'),
             '-in:file:s', job.inputs.pdb_path,
             '-app:sfxn', job.scorefxn,
+            '-app:algorithm', *job.bench.algorithm,
             '-app:out:scores', job.outputs.score_path,
             '-app:out:pdbs', job.outputs.pdb_prefix,
             '-app:out:hbonds', job.outputs.hbond_prefix,
@@ -34,9 +35,9 @@ def buns_seq_recov(job, resis=None):
             '-out:unmute core.init',
             '-out:unmute core.pack.pack_rotamers',
     ]
-    if resis:
+    if job.resis:
         cmd += [
-            '-app:resis', resis,
+            '-app:resis', job.resis_str,
         ]
 
     job.outputs.mkdirs()
@@ -126,13 +127,13 @@ Arguments:
 {CONFIG_DOCS}
 """
     bench = Benchmark(args['<directory>'])
-    job = Job(bench, args['<pdb>'], args['<sfxn>'])
+    job = Job(bench, args['<pdb>'], args['<sfxn>'], resis=args['<resis>'])
 
     # Record the job before we actually do anything, in case something goes 
     # wrong with the JSON.  Better to crash before doing a bunch of work.
     bench.record_local_job(job)
 
-    buns_seq_recov(job, args['<resis>'])
+    buns_seq_recov(job)
 
 
 @main

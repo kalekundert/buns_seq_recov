@@ -2,6 +2,7 @@
 
 import os
 import json
+import shutil
 import itertools
 from pathlib import Path
 
@@ -9,6 +10,7 @@ class Benchmark:
     default_config = {
             'pdb_dir': '../park2016/pdb/ref',
             'scorefxns': ['ref', 'ref_buns_10'],
+            'algorithm': ['pack'],
             'rosetta_dir': os.environ.get('ROSETTA', 'rosetta'),
             'rosetta_build': os.environ.get('ROSETTA_BUILD', 'default'),
     }
@@ -59,7 +61,6 @@ class Benchmark:
         def hbond_prefix(self):
             return self.output_dir / 'hbond' / '{}_'.format(self.job.pdb)
 
-
     def __init__(self, root):
         if not Path(root).is_dir():
             raise ConfigError("no such directory '{}'".format(root))
@@ -84,6 +85,9 @@ class Benchmark:
         if not self.rosetta_bin_dir.exists():
             raise ConfigError("no Rosetta 'bin/' directory found: '{}'".format(self.rosetta_bin_dir))
     
+    def __eq__(self, other):
+        return self.root == other.root
+    
     def __str__(self):
         return self.root_str
 
@@ -102,6 +106,10 @@ class Benchmark:
     @property
     def scorefxns(self):
         return self.config['scorefxns']
+
+    @property
+    def algorithm(self):
+        return self.config['algorithm']
 
     def inputs(self, job):
         return self.JobInput(self, job)
@@ -162,7 +170,8 @@ class Benchmark:
 
     @property
     def local_job_path(self):
-        return self.root / 'last_local_job.json'
+        return self.root / 'local_jobs.json'
+
     @property
     def last_local_job(self):
         try:
@@ -172,6 +181,9 @@ class Benchmark:
 
     def record_local_job(self, job):
         local_jobs = self.local_jobs
+        if job in local_jobs:
+            return
+
         local_jobs.append(job)
         local_jobs_json = [x.to_json() for x in local_jobs]
 
@@ -188,27 +200,42 @@ class Job:
         return cls(bench, pdb, scorefxn, local_run=False)
 
     def to_json(self):
-        return {'pdb': self.pdb, 'sfxn': self.scorefxn}
+        return {'pdb': self.pdb, 'sfxn': self.scorefxn, 'resis': self.resis}
 
     @classmethod
     def from_json(cls, bench, json_dict):
-        return cls(bench, json_dict['pdb'], json_dict['sfxn'])
+        return cls(bench, json_dict['pdb'], json_dict['sfxn'], resis=json_dict['resis'])
 
-    def __init__(self, bench, pdb, scorefxn, local_run=True):
+    def __init__(self, bench, pdb, scorefxn, *, resis=None, local_run=True):
         if pdb not in bench.pdbs:
             raise ValueError("no pdb '{}' in benchmark '{}'".format(pdb, bench))
         if scorefxn not in bench.scorefxns:
             raise ValueError("no score function '{}' in benchmark '{}'".format(scorefxn, bench))
 
+        def resis_from_str_list_none(resis):
+            if isinstance(resis, str):
+                return [int(x) for x in resis.split(',')]
+            else:
+                return resis or []
+
         self.bench = bench
         self.pdb = pdb
         self.scorefxn = scorefxn
+        self.resis = resis_from_str_list_none(resis)
         self.inputs = bench.inputs(self)
         self.outputs = bench.outputs(self)
         self.local_run = local_run
 
+    def __eq__(self, other):
+        as_tuple = lambda x: (x.bench, x.pdb, x.scorefxn, x.resis, x.local_run)
+        return as_tuple(self) == as_tuple(other)
+
     def __str__(self):
         return f"Job({self.bench}, {self.pdb}, {self.scorefxn})"
+
+    @property
+    def resis_str(self):
+        return ','.join(map(str, self.resis))
 
 
 class ConfigError(Exception):
