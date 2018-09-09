@@ -29,6 +29,9 @@ setup(
             'buns_seq_recov_local=buns_seq_recov.run:local_main',
             'buns_seq_recov_clear=buns_seq_recov.run:clear_main',
             'buns_seq_recov_config=buns_seq_recov.run:config_main',
+            'buns_seq_recov_cmp_sfxn=buns_seq_recov.analysis:cmp_sfxn_main',
+            'buns_seq_recov_cmp_muts=buns_seq_recov.analysis:cmp_muts_main',
+            'buns_seq_recov_show_muts=buns_seq_recov.analysis:show_muts_main',
         ],
     },
     install_requires=[

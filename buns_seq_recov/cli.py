@@ -2,6 +2,7 @@
 
 import docopt
 import functools
+import logging
 
 PKG_PREFIX = "buns_seq_recov"
 CONFIG_DOCS = """\
@@ -33,6 +34,8 @@ Configuration:
         on what platfrom you're on.  It's best to use a release build for full 
         benchmark runs.
 """
+
+log = logging.getLogger(PKG_PREFIX)
 
 def main(func):
 
