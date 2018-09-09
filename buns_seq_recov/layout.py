@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import os
+import re
 import json
 import shutil
 import itertools
@@ -58,8 +59,25 @@ class Benchmark:
             return self.output_dir / 'pdb' / '{}_'.format(self.job.pdb)
 
         @property
+        def pdb_paths(self):
+            glob = '{}_*'.format(self.job.pdb)
+            yield from sorted(self.pdb_prefix.parent.glob(glob))
+
+        @property
         def hbond_prefix(self):
             return self.output_dir / 'hbond' / '{}_'.format(self.job.pdb)
+
+        @property
+        def hbond_glob(self):
+            glob = '{}_*'.format(self.job.pdb)
+            yield from self.hbond_prefix.parent.glob(glob)
+
+        @property
+        def hbond_paths(self):
+            p = re.compile(f'{self.job.pdb}_([A-Z])([0-9]+)([A-Z])')
+            for path in self.hbond_glob:
+                wt, resi, mut = p.match(path.stem).groups()
+                yield int(resi), wt, mut, path
 
     def __init__(self, root):
         if not Path(root).is_dir():
